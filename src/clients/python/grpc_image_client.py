@@ -27,7 +27,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
+import time
 import numpy as np
+import pandas as pd
 import os
 from builtins import range
 from PIL import Image
@@ -43,6 +45,9 @@ from tensorrtserver.api import request_status_pb2
 from tensorrtserver.api import server_status_pb2
 
 FLAGS = None
+
+def _log(*args, **kwargs):
+    print("[Client]", *args, **kwargs)
 
 def model_dtype_to_np(model_dtype):
 
@@ -258,8 +263,11 @@ if __name__ == '__main__':
                         help='Inference server URL. Default is localhost:8001.')
     parser.add_argument('-p', '--preprocessed', type=str, required=False,
                         metavar='FILE', help='Write preprocessed image to specified file.')
+    parser.add_argument('--result-name', type=str, required=False,
+                        help='Path to parquet file')
     parser.add_argument('image_filename', type=str, nargs='?', default=None,
                         help='Input image.')
+    
     FLAGS = parser.parse_args()
 
     # Create gRPC stub for communicating with the server
@@ -354,11 +362,24 @@ if __name__ == '__main__':
         request.raw_input.extend([input_bytes])
 
         # Call and receive response from Infer gRPC
-        responses.append(grpc_stub.Infer(request))
-        print(responses[0].request_status)
+        durations = []
+        for _ in range(2000):
+            start = time.perf_counter()
+            responses.append(grpc_stub.Infer(request))
+            end = time.perf_counter()
+            duration_ms = (end - start) * 1000
+            durations.append(duration_ms)
+            responses.append(grpc_stub.Infer(request))
+           # print(responses[0].request_status)
+        
+        # Save Data
+        df = pd.DataFrame({"duration_ms": durations})
+        df.to_parquet('10.pq')
+        mean, p99 = df["duration_ms"].mean(), np.percentile(durations, 99)
+        _log(f"Mean Latency: {mean}, P99: {p99}")
 
     # TODO: Update postprocess
-    for idx in range(len(responses)):
-        postprocess(responses[idx].meta_data.output, batched_filenames[idx],
-            idx, FLAGS.batch_size, FLAGS.classes,
-            FLAGS.verbose or multiple_inputs)
+    #for idx in range(len(responses)):
+    #    postprocess(responses[idx].meta_data.output, batched_filenames[idx],
+    #        idx, FLAGS.batch_size, FLAGS.classes,
+    #        FLAGS.verbose or multiple_inputs)
