@@ -263,8 +263,8 @@ if __name__ == '__main__':
                         help='Inference server URL. Default is localhost:8001.')
     parser.add_argument('-p', '--preprocessed', type=str, required=False,
                         metavar='FILE', help='Write preprocessed image to specified file.')
-    parser.add_argument('--result-name', type=str, required=False,
-                        help='Path to parquet file')
+    parser.add_argument('--result-path', type=str, required=False,
+                        help='Path to parquet file', dest="result_path")
     parser.add_argument('image_filename', type=str, nargs='?', default=None,
                         help='Input image.')
     
@@ -372,9 +372,10 @@ if __name__ == '__main__':
             responses.append(grpc_stub.Infer(request))
            # print(responses[0].request_status)
         
+        durations = durations[500:1500]        
         # Save Data
         df = pd.DataFrame({"duration_ms": durations})
-        df.to_parquet('10.pq')
+        df.to_parquet(FLAGS.result_path)
         mean, p99 = df["duration_ms"].mean(), np.percentile(durations, 99)
         _log(f"Mean Latency: {mean}, P99: {p99}")
 
